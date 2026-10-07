@@ -110,6 +110,14 @@ platform_do_upgrade() {
 	local board=$(board_name)
 
 	case "$board" in
+	HCMT7981-NAND|\
+	nradio,c8-660-no2|\
+	nradio,wt9103)
+		CI_UBIPART="ubi"
+		CI_KERNPART="kernel"
+		CI_ROOTPART="rootfs"
+		nand_do_upgrade "$1"
+		;;
 	mediatek,mt7981-rfb|\
 	mediatek,mt7986a-rfb|\
 	mediatek,mt7986a-rfb-snand|\
@@ -392,6 +400,12 @@ platform_check_image() {
 	[ "$#" -gt 1 ] && return 1
 
 	case "$board" in
+	HCMT7981-NAND|\
+	nradio,c8-660-no2|\
+	nradio,wt9103)
+		nand_do_platform_check "nradio_c8-660-no2" "$1"
+		return $?
+		;;
 	abt,asr3000|\
 	acer,predator-w6x-ubootmod|\
 	asus,zenwifi-bt8-ubootmod|\

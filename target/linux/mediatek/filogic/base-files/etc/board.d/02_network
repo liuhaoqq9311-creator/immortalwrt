@@ -134,6 +134,11 @@ mediatek_setup_interfaces()
 	local board="$1"
 
 	case $board in
+	HCMT7981-NAND|\
+	nradio,c8-660-no2|\
+	nradio,wt9103)
+		ucidef_set_interfaces_lan_wan "lan1 lan2 lan3 BLUE4" "eth1"
+		;;
 	abt,asr3000|\
 	buffalo,wsr-6000ax8|\
 	cmcc,rax3000m|\
@@ -412,6 +417,14 @@ mediatek_setup_macs()
 	local label_mac=""
 
 	case $board in
+	HCMT7981-NAND|\
+	nradio,c8-660-no2|\
+	nradio,wt9103)
+		lan_mac=$(mtd_get_mac_ascii bdinfo "fac_mac")
+		[ -n "$lan_mac" ] || lan_mac=$(cat /sys/class/net/eth0/address)
+		wan_mac=$(macaddr_add "$lan_mac" 1)
+		label_mac=$lan_mac
+		;;
 	airpi,ap3000m)
 		base_mac=$(macaddr_generate_from_mmc_cid mmcblk0)
 		lan_mac="$base_mac"

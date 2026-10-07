@@ -4083,3 +4083,22 @@ ifneq ($(CONFIG_TARGET_ROOTFS_INITRAMFS),)
 endif
 endef
 TARGET_DEVICES += zyxel_wx5600-t0-ubootmod
+
+
+define Device/nradio_c8-660-no2
+  DEVICE_VENDOR := NRadio
+  DEVICE_MODEL := C8-660 No2
+  DEVICE_DTS := mt7981b-nradio-c8-660-no2
+  DEVICE_DTS_DIR := ../dts
+  SUPPORTED_DEVICES += HCMT7981-NAND nradio,wt9103 nradio,c8-660-no2
+  DEVICE_PACKAGES := kmod-mt7915e kmod-mt7981-firmware kmod-usb3 \
+	kmod-usb-serial-option kmod-usb-net-qmi-wwan kmod-usb-net-cdc-mbim \
+	uqmi umbim sendat adb luci-app-Secondsystem660
+  UBINIZE_OPTS := -E 5
+  BLOCKSIZE := 128k
+  PAGESIZE := 2048
+  IMAGE_SIZE := 436736k
+  KERNEL_IN_UBI := 1
+  IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata
+endef
+TARGET_DEVICES += nradio_c8-660-no2
