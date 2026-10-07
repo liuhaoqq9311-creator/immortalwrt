@@ -34,3 +34,16 @@ checkout and the OEM rootfs. /usr/bin/smstrun.conf is user-owned token data and
 is not supplied by OEM; no token file is generated. Original calls remain.
 Full hardware behavior, MTD/UBI numbering, SIM options and the OEM binaries
 require device acceptance. See specs/004-wt9103-mac80211/ in the parent workspace.
+
+The dev_wt9103 branch is dedicated to WT9103/C8-660. Its global
+CONFIG_MTD_PARTITIONED_MASTER=y intentionally matches the rebase tree;
+other Filogic boards are outside this branch's acceptance scope.
+
+The missing autoswitch.sh is referenced by the original RM520N script for
+scheduled cellular network-mode switching (automatic/4G/5G), configured by
+switchNetwork, Autoswitchtime and smode2. These references were already present
+in the initial rebase import fdf09a2c8f0347859dfe62f803c6ee7808385d0f.
+The imported rm520n.sh matches the unpacked OEM file byte for byte, while neither
+the OEM package file list nor the rebase file history provides autoswitch.sh.
+The original references are retained; the reason the implementation is absent
+cannot be established from the available sources.
