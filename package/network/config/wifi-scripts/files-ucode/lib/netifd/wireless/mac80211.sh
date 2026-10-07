@@ -93,20 +93,15 @@ function setup_phy(phy, config, data) {
 		rxantenna: config.rxantenna
 	});
 
-	if (config.txpower)
-		config.txpower = 'fixed ' + config.txpower + '00';
-	else
-		config.txpower = 'auto';
-
 	log(`Configuring '${phy}' txantenna: ${config.txantenna}, rxantenna: ${config.rxantenna} distance: ${config.distance}`);
-	system(`iw phy ${phy} set antenna ${config.txantenna} ${config.rxantenna}`);
+	system(`iw phy ${phy} set antenna ${config.txantenna} ${config.rxantenna} radio ${config.radio}`);
 	system(`iw phy ${phy} set distance ${config.distance}`);
-	system(`iw phy ${phy} set txpower ${config.txpower}`);
+	system(`iw phy ${phy} set txpower auto radio ${config.radio}`);
 
 	if (config.frag)
 		system(`iw phy ${phy} set frag ${config.frag}`);
 	if (config.rts)
-		system(`iw phy ${phy} set rts ${config.rts}`);
+		system(`iw phy ${phy} set rts ${config.rts} radio ${config.radio}`);
 }
 
 function iw_htmode(config) {
@@ -288,28 +283,34 @@ function setup() {
 		wdev_data[v.config.ifname] = config;
 	}
 
-	for (let ifname in active_ifnames) {
-		if (!wdev_data[ifname])
-			continue;
-
-		let if_config = {
-			[ifname]: wdev_data[ifname]
-		};
-		system(`ucode /usr/share/hostap/wdev.uc ${data.phy}${data.phy_suffix} set_config '${if_config}'`);
-	}
-
 	if (fs.access('/usr/sbin/wpa_supplicant', 'x'))
 		supplicant.setup(supplicant_data, data);
 
 	if (fs.access('/usr/sbin/hostapd', 'x'))
 		hostapd.setup(data);
 
+	system(`ucode /usr/share/hostap/wdev.uc ${data.phy}${data.phy_suffix} set_config '${printf("%J", wdev_data)}' ${join(' ', active_ifnames)}`);
+
 	if (length(supplicant_data) > 0)
 		supplicant.start(data);
 
 	netifd.set_up();
 
-	return 0
+	system(`echo "${data.config.sr_enable}" > /sys/kernel/debug/ieee80211/phy0/mt76/band${data.config.radio}/sr_enable`);
+	system(`echo "${data.config.sr_enhanced}" > /sys/kernel/debug/ieee80211/phy0/mt76/band${data.config.radio}/sr_enhanced_enable`);
+
+	if (data.config.txpower)
+		data.config.txpower = 'fixed ' + data.config.txpower + '00';
+	else
+		data.config.txpower = 'auto';
+
+	system(`iw phy ${data.phy} set txpower ${data.config.txpower} radio ${data.config.radio}`);
+
+	log(`Setup SMP Affinity`);
+	system(`/sbin/smp-mt76.sh`);
+	system(`echo /tmp/%e.core > /proc/sys/kernel/core_pattern`);
+
+	return 0;
 }
 
 function teardown() {

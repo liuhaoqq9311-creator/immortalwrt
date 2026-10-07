@@ -8,11 +8,11 @@ let wifi_devices = json(readfile('/usr/share/wifi_devices.json'));
 let countries = json(readfile('/usr/share/iso3166.json'));
 let board_data = json(readfile('/etc/board.json'));
 
-let ubus = libubus.connect();
+export let phys = nl80211.request(nl80211.const.NL80211_CMD_GET_WIPHY, nl80211.const.NLM_F_DUMP, { split_wiphy_dump: true });
+let interfaces = nl80211.request(nl80211.const.NL80211_CMD_GET_INTERFACE, nl80211.const.NLM_F_DUMP);
 
-export let phys;
-let interfaces;
-let wireless_status;
+let ubus = libubus.connect();
+let wireless_status = ubus.call('network.wireless', 'status');
 
 function find_phy(wiphy) {
 	for (let k,  phy in phys)
@@ -21,16 +21,15 @@ function find_phy(wiphy) {
 	return null;
 }
 
-function get_survey(iface) {
-	let channels = nl80211.request(nl80211.const.NL80211_CMD_GET_SURVEY, nl80211.const.NLM_F_DUMP, { dev: iface.ifname });
-	for (let channel in channels)
-		if (channel.survey_info?.frequency == iface.wiphy_freq)
-			return channel.survey_info;
-	return null;
-}
-
 function get_noise(iface) {
-	return iface.survey?.noise ?? -100;
+	for (let phy in phys) {
+		let channels = nl80211.request(nl80211.const.NL80211_CMD_GET_SURVEY, nl80211.const.NLM_F_DUMP, { dev: iface.ifname });
+		for (let k, channel in channels)
+			if (channel.survey_info.frequency == iface.wiphy_freq)
+				return channel.survey_info.noise;
+	}
+
+	return -100;
 }
 
 function get_country(iface) {
@@ -94,48 +93,39 @@ const iftypes = [
 ];
 
 export let ifaces = {};
+for (let k, v in interfaces) {
+	let iface = ifaces[v.ifname] = v;
 
-export function update() {
-	phys = nl80211.request(nl80211.const.NL80211_CMD_GET_WIPHY, nl80211.const.NLM_F_DUMP, { split_wiphy_dump: true });
-	interfaces = nl80211.request(nl80211.const.NL80211_CMD_GET_INTERFACE, nl80211.const.NLM_F_DUMP);
-	wireless_status = ubus.call('network.wireless', 'status');
+	iface.mode = iftypes[iface.iftype] ?? 'unknown',
+	iface.noise = get_noise(iface);
+	iface.country = get_country(iface);
+	iface.max_power = get_max_power(iface);
+	iface.assoclist = nl80211.request(nl80211.const.NL80211_CMD_GET_STATION, nl80211.const.NLM_F_DUMP, { dev: v.ifname }) ?? [];
+	iface.hardware = get_hardware_id(iface);
 
-	ifaces = {};
-	for (let k, v in interfaces) {
-		let iface = ifaces[v.ifname] = v;
+	iface.bss_info = ubus.call('hostapd', 'bss_info', { iface: v.ifname });
+	if (!iface.bss_info)
+		iface.bss_info = ubus.call('wpa_supplicant', 'bss_info', { iface: v.ifname });
+}
 
-		iface.mode = iftypes[iface.iftype] ?? 'unknown',
-		iface.survey = get_survey(iface);
-		iface.noise = get_noise(iface);
-		iface.country = get_country(iface);
-		iface.max_power = get_max_power(iface);
-		iface.assoclist = nl80211.request(nl80211.const.NL80211_CMD_GET_STATION, nl80211.const.NLM_F_DUMP, { dev: v.ifname }) ?? [];
-		iface.hardware = get_hardware_id(iface);
+for (let radio, data in wireless_status)
+	for (let k, v in data.interfaces) {
+		if (!v.ifname || !ifaces[v.ifname])
+			continue;
 
-		iface.bss_info = ubus.call('hostapd', 'bss_info', { iface: v.ifname });
-		if (!iface.bss_info)
-			iface.bss_info = ubus.call('wpa_supplicant', 'bss_info', { iface: v.ifname });
-	}
+		ifaces[v.ifname].ssid = v.config.ssid || v.config.mesh_id;
+		ifaces[v.ifname].radio = data.config;
+		
+		let bss_info = ifaces[v.ifname].bss_info;
+		let owe_transition_ifname = bss_info?.owe_transition_ifname;
 
-	for (let radio, data in wireless_status)
-		for (let k, v in data.interfaces) {
-			if (!v.ifname || !ifaces[v.ifname])
-				continue;
-
-			ifaces[v.ifname].ssid = v.config.ssid || v.config.mesh_id;
-			ifaces[v.ifname].radio = data.config;
-
-			let bss_info = ifaces[v.ifname].bss_info;
-			let owe_transition_ifname = bss_info?.owe_transition_ifname;
-
-			if (v.config.owe_transition && ifaces[owe_transition_ifname]) {
-				ifaces[v.ifname].owe_transition_ifname = owe_transition_ifname;
-				ifaces[owe_transition_ifname].ssid = v.config.ssid;
-				ifaces[owe_transition_ifname].radio = data.config;
-				ifaces[owe_transition_ifname].owe_transition_ifname = v.ifname
-			}
+		if (v.config.owe_transition && ifaces[owe_transition_ifname]) {
+			ifaces[v.ifname].owe_transition_ifname = owe_transition_ifname;
+			ifaces[owe_transition_ifname].ssid = v.config.ssid;
+			ifaces[owe_transition_ifname].radio = data.config;
+			ifaces[owe_transition_ifname].owe_transition_ifname = v.ifname
 		}
-};
+	}
 
 function format_channel(freq) {
 	if (freq < 1000)
@@ -177,10 +167,6 @@ function format_frequency(freq) {
 
 function format_rate(rate) {
 	return rate ? sprintf('%.01f', rate / 10.0) : 'unknown';
-}
-
-function format_expected_throughput(rate) {
-	return rate ? sprintf('%.01f', rate / 1000.0) : 'unknown';
 }
 
 function format_mgmt_key(key) {
@@ -326,7 +312,7 @@ function dbm2quality(dbm) {
 }
 
 function hwmodelist(name) {
-	const mode = { 'HT*': 'n', 'VHT*': 'ac', 'HE*': 'ax', 'EHT*': 'be' };
+	const mode = { 'HT*': 'n', 'VHT*': 'ac', 'HE*': 'ax' };
 	let iface = ifaces[name];
 	let phy = board_data.wlan?.['phy' + iface.wiphy];
 	if (!phy || !iface.radio?.band)
@@ -366,7 +352,7 @@ export function assoclist(dev) {
 				packets: station.sta_info.tx_packets ?? 0,
 				flags: assoc_flags(station.sta_info.tx_bitrate ?? {}),
 			},
-			expected_throughput: format_expected_throughput(station.sta_info.expected_throughput ?? 0),
+			expected_throughput: station.sta_info.expected_throughput ?? 'unknown',
 		};
 		ret[sta.mac] = sta;
 	}
@@ -455,7 +441,7 @@ export function info(name) {
 		};
 
 		let phy = find_phy(data.wiphy);
-		for (let limit in phy.interface_combinations?.[0]?.limits)
+		for (let limit in phy.interface_combinations[0]?.limits)
 			if (limit.types?.ap && limit.max > 1)
 				dev.vaps = 'yes';
 
@@ -684,5 +670,3 @@ export function scan(dev) {
 
 	return cells;
 };
-
-update();

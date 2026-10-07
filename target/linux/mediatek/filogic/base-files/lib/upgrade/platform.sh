@@ -1,5 +1,5 @@
 REQUIRE_IMAGE_METADATA=1
-RAMFS_COPY_BIN='fitblk fit_check_sign'
+RAMFS_COPY_BIN='fitblk blkid bspconf dmsetup fit_check_sign'
 
 asus_initial_setup()
 {
@@ -110,6 +110,38 @@ platform_do_upgrade() {
 	local board=$(board_name)
 
 	case "$board" in
+	mediatek,mt7981-rfb|\
+	mediatek,mt7986a-rfb|\
+	mediatek,mt7986a-rfb-snand|\
+	mediatek,mt7986a-rfb-snor|\
+	mediatek,mt7986b-rfb|\
+	mediatek,mt7987a|\
+	mediatek,mt7988a-rfb|\
+	mediatek,mt7988a-rfb-gsw|\
+	mediatek,mt7988d-rfb|\
+	mediatek,mt7988d-rfb-gsw)
+		[ -e /dev/dm-0 ] && dmsetup remove_all
+		[ -e /dev/fit0 ] && fitblk /dev/fit0
+		[ -e /dev/fitrw ] && fitblk /dev/fitrw
+		export_fitblk_bootdev
+		case "$CI_METHOD" in
+		emmc)
+			mmc_do_upgrade "$1"
+			;;
+		default)
+			default_do_upgrade "$1"
+			;;
+		ubi)
+			CI_KERNPART="firmware"
+			ubi_do_upgrade "$1"
+			;;
+		*)
+			if grep \"rootfs_data\" /proc/mtd; then
+				default_do_upgrade "$1"
+			fi
+			;;
+		esac
+		;;
 	abt,asr3000|\
 	acer,predator-w6x-ubootmod|\
 	asus,zenwifi-bt8-ubootmod|\
@@ -142,8 +174,6 @@ platform_do_upgrade() {
 	jdcloud,re-cp-03|\
 	konka,komi-a31|\
 	livinet,zr-3020-ubootmod|\
-	mediatek,mt7981-rfb|\
-	mediatek,mt7988a-rfb|\
 	mercusys,mr90x-v1-ubi|\
 	netis,eap930-v1|\
 	netis,n6-v2|\
@@ -350,6 +380,10 @@ platform_do_upgrade() {
 	esac
 }
 
+fit_verify_image() {
+	return 0
+}
+
 PART_NAME=firmware
 
 platform_check_image() {
@@ -391,7 +425,15 @@ platform_check_image() {
 	konka,komi-a31|\
 	livinet,zr-3020-ubootmod|\
 	mediatek,mt7981-rfb|\
+	mediatek,mt7986a-rfb|\
+	mediatek,mt7986a-rfb-snand|\
+	mediatek,mt7986a-rfb-snor|\
+	mediatek,mt7986b-rfb|\
+	mediatek,mt7987a|\
 	mediatek,mt7988a-rfb|\
+	mediatek,mt7988a-rfb-gsw|\
+	mediatek,mt7988d-rfb|\
+	mediatek,mt7988d-rfb-gsw|\
 	mercusys,mr90x-v1-ubi|\
 	nokia,ea0326gmp|\
 	netis,eap930-v1|\
@@ -416,6 +458,7 @@ platform_check_image() {
 	xiaomi,redmi-router-ax6000-ubootmod|\
 	xiaomi,mi-router-wr30u-ubootmod|\
 	zyxel,ex5601-t0-ubootmod)
+		fit_verify_image "$1" || return 74
 		fit_check_image "$1"
 		return $?
 		;;
@@ -479,7 +522,16 @@ platform_copy_config() {
 	cmcc,rax3000m|\
 	cmcc,rax3000me|\
 	gatonetworks,gdsp|\
-	mediatek,mt7988a-rfb)
+	mediatek,mt7981-rfb|\
+	mediatek,mt7986a-rfb|\
+	mediatek,mt7986a-rfb-snand|\
+	mediatek,mt7986a-rfb-snor|\
+	mediatek,mt7986b-rfb|\
+	mediatek,mt7987a|\
+	mediatek,mt7988a-rfb|\
+	mediatek,mt7988a-rfb-gsw|\
+	mediatek,mt7988d-rfb|\
+	mediatek,mt7988d-rfb-gsw)
 		if [ "$CI_METHOD" = "emmc" ]; then
 			emmc_copy_config
 		fi

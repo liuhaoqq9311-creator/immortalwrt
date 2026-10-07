@@ -16,22 +16,20 @@ function set_fixed_freq(data, config) {
 	set_default(config, 'fixed_freq', 1);
 	set_default(config, 'frequency', data.frequency);
 
-	if (data.htmode in [ 'VHT80', 'HE80', 'EHT80' ])
+	if (data.htmode in [ 'VHT80', 'HE80' ])
 		set_default(config, 'max_oper_chwidth', 1);
-	else if (data.htmode in [ 'VHT160', 'HE160', 'EHT160' ])
+	else if (data.htmode in [ 'VHT160', 'HE160' ])
 		set_default(config, 'max_oper_chwidth', 2);
-	else if (data.htmode in [ 'EHT320' ])
-		set_default(config, 'max_oper_chwidth', 9);
-	else if (data.htmode in [ 'VHT20', 'VHT40', 'HE20', 'HE40', 'EHT20', 'EHT40' ])
+	else if (data.htmode in [ 'VHT20', 'VHT40', 'HE20', 'HE40' ])
 		set_default(config, 'max_oper_chwidth', 0);
 	else
 		set_default(config, 'disable_vht', true);
 
 	if (data.htmode in [ 'NOHT' ])
 		set_default(config, 'disable_ht', true);
-	else if (data.htmode in [ 'HT20', 'VHT20', 'HE20', 'EHT20' ])
+	else if (data.htmode in [ 'HT20', 'VHT20', 'HE20' ])
 		set_default(config, 'disable_ht40', true);
-	else if (data.htmode in [ 'VHT40', 'VHT80', 'VHT160', 'HE40', 'HE80', 'HE160', 'EHT40', 'EHT80', 'EHT160', 'EHT320' ])
+	else if (data.htmode in [ 'VHT40', 'VHT80', 'VHT160', 'HE40', 'HE80', 'HE160' ])
 		set_default(config, 'ht40', true);
 
 	if (wildcard(data.htmode, 'VHT*'))
@@ -57,12 +55,54 @@ export function ratelist(rates) {
 	return join(",", map(rates, (rate) => ratestr(rate)));
 };
 
-function setup_sta(data, config) {
-	iface.parse_encryption(config, data);
+function sta_global_mtk_options(config) {
+	append_vars(config, [ 'tx_queue_data2_burst', 'rsn_overriding', 'disable_rrm', 'mld_force_single_link' ]);
+	append_raw('wps_cred_add_sae=1');
 
-	if (config.auth_type in [ 'sae', 'owe', 'eap2', 'eap192' ])
+	if (config.auth_type in [ 'sae', 'psk-sae', 'sae-ext', 'psk-sae-ext' ])
+		append_vars(config, [ 'sae_groups', 'sae_pwe' ]);
+
+	if (config.auth_type in [ 'owe' ])
+		append_vars(config, [ 'owe_groups' ]);
+
+	if (!config.mlo)
+		append_raw('disable_mld=1');
+
+	if (config.mlo && config.mld_assoc_band) {
+		switch (config.mld_assoc_band) {
+		case "2g":
+			config.mld_connect_band_pref = 1;
+			break;
+
+		case "5g":
+			config.mld_connect_band_pref = 2;
+			break;
+
+		case "6g":
+			config.mld_connect_band_pref = 3;
+			break;
+
+		}
+
+		append_vars(config, [ 'mld_connect_band_pref' ]);
+	}
+};
+
+function sta_network_mtk_options(config) {
+	network_append_vars(config, [ 'disable_he', 'disable_eht', 'mtk_vendor_element' ]);
+
+	if (config.ieee80211w) {
+		network_append_vars(config, [ 'beacon_prot' ]);
+		network_append('group_mgmt', config.ieee80211w_mgmt_cipher);
+	}
+};
+
+function setup_sta(data, config) {
+	iface.parse_encryption(config);
+
+	if (config.auth_type in [ 'sae', 'sae-ext', 'owe', 'eap2', 'eap192' ])
 		config.ieee80211w = 2;
-	else if (config.auth_type in [ 'psk-sae' ] && !config.ieee80211w)
+	else if (config.auth_type in [ 'psk-sae', 'psk-sae-ext' ])
 		config.ieee80211w = 1;
 	if ((wildcard(data.htmode, 'EHT*') || wildcard(data.htmode, 'HE*')) &&
 		config.rsn_override)
@@ -131,7 +171,9 @@ function setup_sta(data, config) {
 	case 'psk':
 	case 'psk2':
 	case 'sae':
+	case 'sae-ext':
 	case 'psk-sae':
+	case 'psk-sae-ext':
 		if (config.mode != 'mesh')
 			iface.wpa_key_mgmt(config);
 
@@ -151,29 +193,11 @@ function setup_sta(data, config) {
 		if (config.ca_cert_usesystem && fs.stat('/etc/ssl/certs/ca-certificates.crt'))
 			config.ca_cert = '/etc/ssl/certs/ca-certificates.crt';
 
-		const eap_method_map = { fast: 'FAST', peap: 'PEAP', ttls: 'TTLS', tls: 'TLS' };
-		if (eap_method_map[config.eap_type])
-			config.eap = eap_method_map[config.eap_type];
-
 		switch(config.eap_type) {
 		case 'fast':
 		case 'peap':
 		case 'ttls':
 			set_default(config, 'auth', 'MSCHAPV2');
-
-			let auth = config.auth;
-			let phase2proto = 'auth=';
-			if (index(auth, 'auth') == 0) {
-				/* user already provided a full "auth=..." spec */
-				phase2proto = '';
-			} else if (index(auth, 'EAP-') == 0) {
-				/* inner EAP method, e.g. EAP-MSCHAPV2 -> MSCHAPV2 */
-				auth = substr(auth, 4);
-				if (config.eap_type == 'ttls')
-					phase2proto = 'autheap=';
-			}
-			config.phase2 = `"${phase2proto}${auth}"`;
-
 			if (config.auth == 'EAP-TLS') {
 				if (config.ca_cert2_usesystem && fs.stat('/etc/ssl/certs/ca-certificates.crt'))
 					config.ca_cert2 = '/etc/ssl/certs/ca-certificates.crt';
@@ -183,6 +207,10 @@ function setup_sta(data, config) {
 
 	}
 
+	if (!config.pairwise) {
+		config.pairwise = config.wpa_pairwise;
+	}
+
 	if (config.wpa_pairwise == 'GCMP') {
 		config.pairwise = 'GCMP';
 		config.group = 'GCMP';
@@ -190,51 +218,29 @@ function setup_sta(data, config) {
 
 	config.key_mgmt ??= 'NONE';
 
-	/*
-	 * Map UCI basic_rate to the correct wpa_supplicant network field:
-	 *   mesh  -> mesh_basic_rates  (space-separated, 100 kb/s units)
-	 *   other -> rates             (comma-separated Mbps, e.g. "5.5,11")
-	 * "basic_rate" itself is not a valid wpa_supplicant network field.
-	 */
-	let brates = config.basic_rate;
-	config.basic_rate = null;
-	if (brates != null && length(brates) > 0) {
-		if (config.mode == 'mesh')
-			config.mesh_basic_rates = join(" ", map(brates, (br) => "" + int(br / 100)));
-		else
-			config.rates = ratelist(brates);
-	}
-
+	config.basic_rate = ratelist(config.basic_rate);
 	config.mcast_rate = ratestr(config.mcast_rate);
 
-	/*
-	 * Certificate constraint lists are semicolon-separated strings in the
-	 * wpa_supplicant config, while UCI stores them as arrays. Join them here
-	 * so they are emitted as a single quoted value below.
-	 */
-	for (let key in [ 'altsubject_match', 'altsubject_match2',
-			  'domain_match', 'domain_match2',
-			  'domain_suffix_match', 'domain_suffix_match2' ])
-		if (type(config[key]) == 'array')
-			config[key] = length(config[key]) ? join(';', config[key]) : null;
+	network_append_string_vars(config, [ 'ssid' ]);
 
-	network_append_string_vars(config, [ 'ssid',
-		'identity', 'anonymous_identity', 'password',
-		'ca_cert', 'ca_cert2', 'client_cert', 'client_cert2',
-		'subject_match', 'subject_match2',
-		'altsubject_match', 'altsubject_match2',
-		'domain_match', 'domain_match2',
-		'domain_suffix_match', 'domain_suffix_match2',
-		'private_key', 'private_key_passwd', 'private_key2', 'private_key2_passwd',
-		 ]);
+	if (config.group_cipher)
+		config.group = config.group_cipher;
+	else
+		config.group = "CCMP TKIP CCMP-256 GCMP GCMP-256";
+
 	network_append_vars(config, [
 		'rsn_overriding', 'scan_ssid', 'noscan', 'disabled', 'multi_ap_profile', 'multi_ap_backhaul_sta',
-		'ocv', 'beacon_prot', 'key_mgmt', 'sae_pwe', 'psk', 'sae_password', 'pairwise', 'group', 'bssid',
+		'ocv', 'key_mgmt', 'sae_pwe', 'psk', 'sae_password', 'pairwise', 'group', 'bssid',
 		'proto', 'mesh_fwding', 'mesh_rssi_threshold', 'frequency', 'fixed_freq',
 		'disable_ht', 'disable_ht40', 'disable_vht', 'vht', 'max_oper_chwidth',
-		'ht40', 'beacon_int', 'ieee80211w', 'rates', 'mesh_basic_rates', 'mcast_rate',
-		'bssid_blacklist', 'bssid_whitelist', 'erp', 'eap', 'phase2',
+		'ht40', 'beacon_int', 'ieee80211w', 'basic_rate', 'mcast_rate',
+		'bssid_blacklist', 'bssid_whitelist', 'erp', 'ca_cert', 'identity',
+		'anonymous_identity', 'client_cert', 'private_key', 'private_key_passwd',
+		'subject_match', 'altsubject_match', 'domain_match', 'domain_suffix_match',
+		'ca_cert2', 'client_cert2', 'private_key2', 'private_key2_passwd', 'password'
 	]);
+
+	sta_network_mtk_options(config);
 }
 
 
@@ -291,6 +297,7 @@ export function generate(config_list, data, interface) {
 	append_vars(interface.config, [ 'country', 'beacon_int', 'freq_list' ]);
 
 	setup_sta(data.config, interface.config);
+	sta_global_mtk_options(interface.config);
 
 	let file_name = `/var/run/wpa-supplicant-${interface.config.ifname}.conf`;
 	if (fs.stat(file_name))
@@ -304,6 +311,7 @@ export function generate(config_list, data, interface) {
 		config: file_name,
 		'4addr': !!interface.config.wds,
 		mlo: !!interface.config.mlo,
+		mld_assoc_band: interface.config.mld_assoc_band,
 		freq_list: data.config.scan_list,
 		powersave: false
 	};

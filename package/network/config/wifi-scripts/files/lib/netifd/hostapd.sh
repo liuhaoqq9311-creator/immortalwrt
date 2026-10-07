@@ -131,7 +131,6 @@ hostapd_common_add_device_config() {
 	config_add_int maxassoc
 	config_add_int reg_power_type
 	config_add_boolean stationary_ap
-	config_add_boolean vendor_vht
 
 	config_add_string acs_chan_bias
 	config_add_array hostapd_options
@@ -151,7 +150,7 @@ hostapd_prepare_device_config() {
 	json_get_vars country country3 country_ie beacon_int:100 doth require_mode legacy_rates \
 		acs_chan_bias local_pwr_constraint spectrum_mgmt_required airtime_mode cell_density \
 		rts_threshold beacon_rate rssi_reject_assoc_rssi rssi_reject_assoc_timeout rssi_ignore_probe_request \
-		maxassoc mbssid:0 band reg_power_type stationary_ap vendor_vht
+		maxassoc mbssid:0 band reg_power_type stationary_ap
 
 	hostapd_set_log_options base_cfg
 
@@ -220,7 +219,6 @@ hostapd_prepare_device_config() {
 				set_default rate_list "24000 36000 48000 54000"
 				set_default basic_rate_list "24000"
 			fi
-			[ -n "$vendor_vht" ] && append base_cfg "vendor_vht=$vendor_vht" "$N"
 		;;
 		a)
 			if [ "$cell_density" -eq 1 ]; then
@@ -347,7 +345,7 @@ hostapd_common_add_bss_config() {
 
 	config_add_boolean ieee80211r pmk_r1_push ft_psk_generate_local ft_over_ds
 	config_add_int r0_key_lifetime reassociation_deadline
-	config_add_string mobility_domain r1_key_holder rxkh_file ft_iface
+	config_add_string mobility_domain r1_key_holder rxkh_file
 	config_add_array r0kh r1kh
 
 	config_add_int ieee80211w_max_timeout ieee80211w_retry_timeout
@@ -403,7 +401,6 @@ hostapd_common_add_bss_config() {
 	config_add_string fils_dhcp
 
 	config_add_int ocv
-	config_add_boolean beacon_prot spp_amsdu
 
 	config_add_boolean apup
 	config_add_string apup_peer_ifname_prefix
@@ -429,13 +426,10 @@ hostapd_set_psk_file() {
 	local vlan="$2"
 	local vlan_id=""
 
-	json_get_vars vid key
-	json_get_values mac_list mac
-	set_default mac_list "00:00:00:00:00:00"
+	json_get_vars mac vid key
+	set_default mac "00:00:00:00:00:00"
 	[ -n "$vid" ] && vlan_id="vlanid=$vid "
-	for mac in $mac_list; do
-		echo "${vlan_id} ${mac} ${key}" >> /var/run/hostapd-${ifname}.psk
-	done
+	echo "${vlan_id} ${mac} ${key}" >> /var/run/hostapd-${ifname}.psk
 }
 
 hostapd_set_psk() {
@@ -454,14 +448,11 @@ hostapd_set_sae_file() {
 	local vlan="$2"
 	local vlan_id=""
 
-	json_get_vars vid key
-	json_get_values mac_list mac
-	set_default mac_list "ff:ff:ff:ff:ff:ff"
+	json_get_vars mac vid key
+	set_default mac "ff:ff:ff:ff:ff:ff"
+	[ -n "$mac" ] && mac="|mac=$mac"
 	[ -n "$vid" ] && vlan_id="|vlanid=$vid"
-	for mac in $mac_list; do
-		mac="|mac=$mac"
-		printf '%s%s%s\n' "${key}" "${mac}" "${vlan_id}" >> /var/run/hostapd-${ifname}.sae
-	done
+	printf '%s%s%s\n' "${key}" "${mac}" "${vlan_id}" >> /var/run/hostapd-${ifname}.sae
 }
 
 hostapd_set_sae() {
@@ -565,7 +556,7 @@ hostapd_set_bss_options() {
 		ppsk airtime_bss_weight airtime_bss_limit airtime_sta_weight \
 		multicast_to_unicast_all proxy_arp per_sta_vif na_mcast_to_ucast \
 		eap_server eap_user_file ca_cert server_cert private_key private_key_passwd server_id radius_server_clients radius_server_auth_port \
-		vendor_elements fils ocv beacon_prot spp_amsdu apup rsn_override
+		vendor_elements fils ocv apup rsn_override
 
 	set_default rsn_override 1
 	set_default fils 0
@@ -637,8 +628,6 @@ hostapd_set_bss_options() {
 	json_for_each_item append_radius_acct_req_attr radius_acct_req_attr
 
 	[ -n "$ocv" ] && append bss_conf "ocv=$ocv" "$N"
-	[ -n "$beacon_prot" ] && append bss_conf "beacon_prot=$beacon_prot" "$N"
-	[ -n "$spp_amsdu" ] && append bss_conf "spp_amsdu=$spp_amsdu" "$N"
 
 	case "$auth_type" in
 		sae|owe|eap2|eap192)
@@ -927,12 +916,11 @@ hostapd_set_bss_options() {
 
 	if [ "$wpa" -ge "2" ]; then
 		if [ "$ieee80211r" -gt "0" ]; then
-			json_get_vars mobility_domain ft_psk_generate_local ft_over_ds reassociation_deadline ft_iface
+			json_get_vars mobility_domain ft_psk_generate_local ft_over_ds reassociation_deadline
 
 			set_default mobility_domain "$(echo "$ssid" | md5sum | head -c 4)"
 			set_default ft_over_ds 0
 			set_default reassociation_deadline 20000
-			[ -n "$network_ifname" ] && set_default ft_iface "$network_ifname"
 
 			case "$auth_type" in
 				psk)
@@ -943,7 +931,7 @@ hostapd_set_bss_options() {
 				;;
 			esac
 
-			[ -n "$ft_iface" ] && append bss_conf "ft_iface=$ft_iface" "$N"
+			[ -n "$network_ifname" ] && append bss_conf "ft_iface=$network_ifname" "$N"
 			append bss_conf "mobility_domain=$mobility_domain" "$N"
 			append bss_conf "ft_psk_generate_local=$ft_psk_generate_local" "$N"
 			append bss_conf "ft_over_ds=$ft_over_ds" "$N"
@@ -1336,7 +1324,7 @@ wpa_supplicant_add_network() {
 	json_get_vars \
 		ssid bssid key rsn_override \
 		mcast_rate \
-		ieee80211w ieee80211r fils ocv beacon_prot \
+		ieee80211w ieee80211r fils ocv \
 		multi_ap \
 		default_disabled
 
@@ -1394,7 +1382,6 @@ wpa_supplicant_add_network() {
 	}
 
 	[ -n "$ocv" ] && append network_data "ocv=$ocv" "$N$T"
-	[ -n "$beacon_prot" ] && append network_data "beacon_prot=$beacon_prot" "$N$T"
 
 	rsn_overriding=0
 	case "$htmode" in

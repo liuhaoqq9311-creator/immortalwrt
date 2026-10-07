@@ -76,7 +76,7 @@
 		"beamformee_antennas": {
 			"description": "Beamformee antenna override",
 			"type": "number",
-			"default": 4
+			"default": 5
 		},
 		"beamformer_antennas": {
 			"description": "Beamformer antenna override",
@@ -170,8 +170,7 @@
 			"description": "BSS color to be announced",
 			"type": "number",
 			"minimum": 1,
-			"maximum": 128,
-			"default": 128
+			"maximum": 63
 		},
 		"he_bss_color_enabled": {
 			"description": "Enable BSS color",
@@ -195,7 +194,7 @@
 		},
 		"he_mu_edca_ac_be_aifsn": {
 			"type": "number",
-			"default": 8
+			"default": 0
 		},
 		"he_mu_edca_ac_be_ecwmax": {
 			"type": "number",
@@ -207,7 +206,7 @@
 		},
 		"he_mu_edca_ac_be_timer": {
 			"type": "number",
-			"default": 255
+			"default": 3
 		},
 		"he_mu_edca_ac_bk_aci": {
 			"type": "number",
@@ -215,7 +214,7 @@
 		},
 		"he_mu_edca_ac_bk_aifsn": {
 			"type": "number",
-			"default": 15
+			"default": 0
 		},
 		"he_mu_edca_ac_bk_ecwmax": {
 			"type": "number",
@@ -227,7 +226,7 @@
 		},
 		"he_mu_edca_ac_bk_timer": {
 			"type": "number",
-			"default": 255
+			"default": 3
 		},
 		"he_mu_edca_ac_vi_aci": {
 			"type": "number",
@@ -235,7 +234,7 @@
 		},
 		"he_mu_edca_ac_vi_aifsn": {
 			"type": "number",
-			"default": 5
+			"default": 0
 		},
 		"he_mu_edca_ac_vi_ecwmax": {
 			"type": "number",
@@ -247,7 +246,7 @@
 		},
 		"he_mu_edca_ac_vi_timer": {
 			"type": "number",
-			"default": 255
+			"default": 3
 		},
 		"he_mu_edca_ac_vo_aci": {
 			"type": "number",
@@ -255,7 +254,7 @@
 		},
 		"he_mu_edca_ac_vo_aifsn": {
 			"type": "number",
-			"default": 5
+			"default": 0
 		},
 		"he_mu_edca_ac_vo_ecwmax": {
 			"type": "number",
@@ -267,7 +266,7 @@
 		},
 		"he_mu_edca_ac_vo_timer": {
 			"type": "number",
-			"default": 255
+			"default": 3
 		},
 		"he_mu_edca_qos_info_param_count": {
 			"type": "number",
@@ -355,9 +354,9 @@
 			"type": "string",
 			"enum": [
 				"NOHT", "HT20", "HT40-", "HT40+", "HT40",
-				"VHT20", "VHT40", "VHT80", "VHT160",
-				"HE20", "HE40", "HE80", "HE160",
-				"EHT20", "EHT40", "EHT80", "EHT160", "EHT320" ]
+				"VHT20", "VHT40", "VHT40-", "VHT40+", "VHT80", "VHT160",
+				"HE20", "HE40", "HE40-", "HE40+", "HE80", "HE160",
+				"EHT20", "EHT40", "EHT40-", "EHT40+", "EHT80", "EHT160", "EHT320", "EHT320-1", "EHT320-2" ]
 		},
 		"hwmode": {
 			"type": "alias",
@@ -534,6 +533,10 @@
 			"type": "number",
 			"default": 1
 		},
+		"no_probe_resp_if_max_sta": {
+			"description": "Do not answer probe requests if iface_max_num_sta was reached",
+			"type": "boolean"
+		},
 		"noscan": {
 			"description": "Do not scan for overlapping BSSs in HT40+/- mode.",
 			"type": "boolean",
@@ -686,7 +689,8 @@
 		},
 		"tx_queue_data2_burst": {
 			"description": "",
-			"type": "number"
+			"type": "number",
+			"default": 0.0
 		},
 		"tx_stbc": {
 			"description": "Transmit STBC (Space-Time Block Coding)",
@@ -740,6 +744,94 @@
 			"description": "VHT TXOP PS mode",
 			"type": "boolean",
 			"default": true
+		},
+		"pp_mode": {
+			"description": "PP mode. 0: disabled, 1: FW mode, 2: user mode",
+			"type": "number",
+			"minimum": 0,
+			"maximum": 2
+		},
+		"pp_bitmap": {
+			"description": "PP bitmap",
+			"type": "number"
+		},
+		"mu_onoff": {
+			"description": "mu_onoff",
+			"type": "number"
+		},
+		"sr_enable": {
+			"description": "sr_enable",
+			"type": "number",
+			"default": 1,
+			"enum": [0, 1]
+		},
+		"sr_enhanced": {
+			"description": "sr_enhanced",
+			"type": "number",
+			"default": 1,
+			"enum": [0, 1]
+		},
+		"obss_interval": {
+			"description": "obss_interval",
+			"type": "number",
+			"default": 300
+		},
+		"background_cert_mode": {
+			"description": "background_cert_mode",
+			"type": "boolean"
+		},
+		"he_twt_responder": {
+			"description": "he_twt_responder",
+			"type": "boolean"
+		},
+		"eht_su_beamformee": {
+			"description": "",
+			"type": "boolean",
+			"default": true
+		},
+		"eht_su_beamformer": {
+			"description": "",
+			"type": "boolean",
+			"default": true
+		},
+		"eht_mu_beamformer": {
+			"description": "EHT multiple user beamformer support",
+			"type": "boolean",
+			"default": true
+		},
+		"etxbfen": {
+			"description": "etxbfen",
+			"type": "boolean",
+			"default": true
+		},
+		"itxbfen": {
+			"description": "itxbfen",
+			"type": "boolean",
+			"default": false
+		},
+		"lpi_psd": {
+			"description": "LPI PSD control",
+			"type": "boolean"
+		},
+		"lpi_bcn_enhance": {
+			"description": "LPI beacon duplicated enhancement",
+			"type": "boolean"
+		},
+		"sku_idx": {
+			"description": "SKU index",
+			"type": "number",
+			"minimum": 0,
+			"maximum": 255
+		},
+		"lpi_sku_idx": {
+			"description": "LPI SKU index",
+			"type": "number",
+			"minimum": 0,
+			"maximum": 255
+		},
+		"eht_bw320_offset": {
+			"description": "EHT BW320 offset",
+			"type": "number"
 		}
 	}
 }

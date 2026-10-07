@@ -463,6 +463,10 @@ endif
 
 	$(RSTRIP) $$(IDIR_$(1))
 
+    ifneq ($(CONFIG_KERNEL_MODULE_SIG),)
+	$(call kmod_sign,$$(IDIR_$(1)))
+    endif
+
     ifneq ($$(CONFIG_IPK_FILES_CHECKSUMS),)
 	(cd $$(IDIR_$(1)); \
 		( \
