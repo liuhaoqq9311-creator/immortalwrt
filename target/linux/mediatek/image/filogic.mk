@@ -4091,7 +4091,7 @@ define Device/nradio_c8-660-no2
   DEVICE_DTS := mt7981b-nradio-c8-660-no2
   DEVICE_DTS_DIR := ../dts
   SUPPORTED_DEVICES += HCMT7981-NAND nradio,wt9103 nradio,c8-660-no2
-  DEVICE_PACKAGES := kmod-mt7915e kmod-mt7981-firmware kmod-usb3 \
+  DEVICE_PACKAGES := kmod-mt7915e kmod-mt7981-firmware mt7981-wo-firmware kmod-usb3 \
 	kmod-usb-serial-option kmod-usb-net-qmi-wwan kmod-usb-net-cdc-mbim \
 	uqmi umbim sendat adb luci-app-Secondsystem660
   UBINIZE_OPTS := -E 5
