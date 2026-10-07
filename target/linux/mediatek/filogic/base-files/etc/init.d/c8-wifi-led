@@ -1,0 +1,22 @@
+#!/bin/sh /etc/rc.common
+
+START=97
+STOP=01
+USE_PROCD=1
+
+start_service() {
+	case "$(board_name)" in
+		HCMT7981-NAND|nradio,c8-660-no2|nradio,wt9103) ;;
+		*) return 0 ;;
+	esac
+
+	procd_open_instance
+	procd_set_param command /usr/libexec/c8-wifi-led /sys/class/leds/hc:blue:wifi
+	procd_set_param respawn
+	procd_close_instance
+}
+
+stop_service() {
+	[ -e /sys/class/leds/hc:blue:wifi/brightness ] && \
+		printf '0\n' > /sys/class/leds/hc:blue:wifi/brightness
+}
