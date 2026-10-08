@@ -137,7 +137,8 @@ mediatek_setup_interfaces()
 	HCMT7981-NAND|\
 	nradio,c8-660-no2|\
 	nradio,wt9103)
-		ucidef_set_interfaces_lan_wan "lan1 lan2 lan3 BLUE4" "eth1"
+		ucidef_set_interfaces_lan_wan "lan1 lan2 lan3" "eth1"
+		ucidef_set_interface "wan4" device "wan4" protocol "dhcp"
 		;;
 	abt,asr3000|\
 	buffalo,wsr-6000ax8|\
