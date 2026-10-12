@@ -1,0 +1,87 @@
+Subject: [PATCH] hostapd: carry OpenWrt ubus and APuP fixes into MTK stack
+
+The MTK feed embeds the OpenWrt sources and patches in 0009/0010 instead
+of keeping the original src directory and 600/601/780 patches. Apply the
+incoming OpenWrt changes after the MTK series without restoring duplicate
+sources or patches.
+
+Include the raw beacon report in ubus notifications and require Base64
+when ubus is enabled. Keep native link measurement processing alongside
+the ubus notification. Handle APuP station allocation failure and free the
+station when no AID is available.
+
+--- a/hostapd/Makefile
++++ b/hostapd/Makefile
+@@ -181,6 +181,7 @@
+ OBJS += ../src/eapol_auth/eapol_auth_sm.o
+ 
+ ifdef CONFIG_UBUS
++NEED_BASE64=y
+ CFLAGS += -DUBUS_SUPPORT
+ OBJS += ../src/ap/ubus.o
+ LIBS += -lubus
+--- a/src/ap/ubus.c
++++ b/src/ap/ubus.c
+@@ -24,6 +24,7 @@
+ #include "taxonomy.h"
+ #include "airtime_policy.h"
+ #include "hw_features.h"
++#include "base64.h"
+ 
+ static struct ubus_context *ctx;
+ static struct blob_buf b;
+@@ -1979,6 +1980,8 @@
+ 	struct hostapd_data *hapd, const u8 *addr, u8 token, u8 rep_mode,
+ 	struct rrm_measurement_beacon_report *rep, size_t len)
+ {
++	char *encoded;
++
+ 	if (!hapd->ubus.obj.has_subscribers)
+ 		return;
+ 
+@@ -1998,7 +2001,11 @@
+ 	blobmsg_add_u16(&b, "antenna-id", rep->antenna_id);
+ 	blobmsg_add_u16(&b, "parent-tsf", rep->parent_tsf);
+ 	blobmsg_add_u16(&b, "rep-mode", rep_mode);
+-
++	encoded = base64_encode(rep, len, NULL);
++	if (encoded) {
++		blobmsg_add_string(&b, "report", encoded);
++		os_free(encoded);
++	}
+ 	ubus_notify(ctx, &hapd->ubus.obj, "beacon-report", b.head, -1);
+ }
+ 
+--- a/src/ap/rrm.c
++++ b/src/ap/rrm.c
+@@ -409,6 +409,7 @@
+ 		hostapd_handle_nei_report_req(hapd, buf, len);
+ 		break;
+ 	case WLAN_RRM_LINK_MEASUREMENT_REPORT:
++		hostapd_handle_link_mesr_report(hapd, buf, len);
+ 		hostapd_ubus_handle_link_measurement(hapd, buf, len);
+ 		break;
+ 	default:
+--- a/src/ap/apup.c
++++ b/src/ap/apup.c
+@@ -52,6 +52,12 @@
+ 		return;
+ 
+ 	sta_ret = ap_sta_add(hapd, mgmt->bssid);
++	if (!sta_ret)
++	{
++		wpa_printf(MSG_INFO,
++		           "apup_process_beacon(...) Failed to add APuP peer");
++		return;
++	}
+ 
+ 	/* TODO: this has been added just to making compiler happy after breaking
+ 	 * changes introduced in 11a607d12 and 7855b6d60 to support
+@@ -115,6 +121,7 @@
+ 	if (hostapd_get_aid(hapd, sta_ret) < 0)
+ 	{
+ 		wpa_printf(MSG_INFO, "apup_process_beacon(...) No room for more AIDs");
++		ap_free_sta(hapd, sta_ret);
+ 		return;
+ 	}
+ 

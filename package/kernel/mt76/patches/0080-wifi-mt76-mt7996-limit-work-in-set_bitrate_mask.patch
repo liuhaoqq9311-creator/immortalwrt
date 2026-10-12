@@ -1,0 +1,63 @@
+From 42f34c478fcdf7f3c1a9dfcc211abfd3efd86f01 Mon Sep 17 00:00:00 2001
+From: Dylan Eskew <dylan.eskew@candelatech.com>
+Date: Wed, 8 Apr 2026 07:50:58 -0700
+Subject: [PATCH 080/170] wifi: mt76: mt7996: limit work in set_bitrate_mask
+
+[ Upstream commit 5fd3385505600934f5faa9635e5b30fa38e548b9 ]
+
+Calls to mt7996_set_bitrate_mask() would propagate work for all stations
+on the ieee80211_hw regardless of the vif specified in the call. To
+prevent unnecessary work in FW, limit setting the sta_rate to only the
+specified vif in mt7996_sta_rate_ctrl_update().
+
+Fixes: afff4325548f0 ("wifi: mt76: mt7996: Use proper link_id in link_sta_rc_update callback")
+Signed-off-by: Dylan Eskew <dylan.eskew@candelatech.com>
+Acked-by: Lorenzo Bianconi <lorenzo@kernel.org>
+Link: https://patch.msgid.link/20260408145057.2356878-2-dylan.eskew@candelatech.com
+Signed-off-by: Felix Fietkau <nbd@nbd.name>
+Signed-off-by: Sasha Levin <sashal@kernel.org>
+
+Restored MTK adaptation from the previously validated source state.
+
+--- a/mt7996/main.c
++++ b/mt7996/main.c
+@@ -2367,10 +2367,13 @@
+ {
+ 	struct mt7996_sta *msta = (struct mt7996_sta *)sta->drv_priv;
+ 	struct mt7996_sta_link *msta_link;
+ 	struct mt7996_sta_rc_work_data *wd = data;
+ 
++	if (msta->vif != wd->vif)
++		return;
++
+ 	msta_link = mt7996_sta_link(msta, wd->link_id);
+ 	if (msta_link)
+ 		mt7996_link_rate_ctrl_update(&wd->changed, msta_link);
+ }
+ 
+@@ -2380,10 +2383,11 @@
+ 			unsigned int link_id)
+ {
+ 	struct mt7996_dev *dev = mt7996_hw_dev(hw);
+ 	struct mt7996_vif_link *link;
+ 	struct mt7996_sta_rc_work_data data = {
++		.vif = (struct mt7996_vif *)vif->drv_priv,
+ 		.link_id = link_id,
+ 		.changed = IEEE80211_RC_SUPP_RATES_CHANGED,
+ 	};
+ 
+ 	mutex_lock(&dev->mt76.mutex);
+--- a/mt7996/mt7996.h
++++ b/mt7996/mt7996.h
+@@ -623,10 +623,11 @@
+ 		__le16 rsv;
+ 	} ring[MT7996_MAX_RRO_RRS_RING];
+ };
+ 
+ struct mt7996_sta_rc_work_data {
++	struct mt7996_vif *vif;
+ 	unsigned int link_id;
+ 	u32 changed;
+ };
+ 
+ struct mt7996_wmm_params {
