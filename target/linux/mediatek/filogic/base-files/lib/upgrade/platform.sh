@@ -159,6 +159,46 @@ platform_do_upgrade() {
 	local board=$(board_name)
 
 	case "$board" in
+	HCMT7981-NAND|\
+	nradio,c8-660-no2|\
+	nradio,wt9103)
+		CI_UBIPART="ubi"
+		CI_KERNPART="kernel"
+		CI_ROOTPART="rootfs"
+		nand_do_upgrade "$1"
+		;;
+	mediatek,mt7981-rfb|\
+	mediatek,mt7986a-rfb|\
+	mediatek,mt7986a-rfb-snand|\
+	mediatek,mt7986a-rfb-snor|\
+	mediatek,mt7986b-rfb|\
+	mediatek,mt7987a|\
+	mediatek,mt7988a-rfb|\
+	mediatek,mt7988a-rfb-gsw|\
+	mediatek,mt7988d-rfb|\
+	mediatek,mt7988d-rfb-gsw)
+		[ -e /dev/dm-0 ] && dmsetup remove_all
+		[ -e /dev/fit0 ] && fitblk /dev/fit0
+		[ -e /dev/fitrw ] && fitblk /dev/fitrw
+		export_fitblk_bootdev
+		case "$CI_METHOD" in
+		emmc)
+			mmc_do_upgrade "$1"
+			;;
+		default)
+			default_do_upgrade "$1"
+			;;
+		ubi)
+			CI_KERNPART="firmware"
+			ubi_do_upgrade "$1"
+			;;
+		*)
+			if grep \"rootfs_data\" /proc/mtd; then
+				default_do_upgrade "$1"
+			fi
+			;;
+		esac
+		;;
 	abt,asr3000|\
 	acer,predator-w6x-ubootmod|\
 	asus,rt-ax59u-ubi|\
@@ -421,6 +461,12 @@ platform_check_image() {
 	[ "$#" -gt 1 ] && return 1
 
 	case "$board" in
+	HCMT7981-NAND|\
+	nradio,c8-660-no2|\
+	nradio,wt9103)
+		nand_do_platform_check "nradio_c8-660-no2" "$1"
+		return $?
+		;;
 	abt,asr3000|\
 	acer,predator-w6x-ubootmod|\
 	asus,rt-ax59u-ubi|\
